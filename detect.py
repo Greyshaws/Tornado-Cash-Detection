@@ -41,10 +41,10 @@ def trace_block_by_number(block_number):
 # Recursively trace calls to Tornado Cash contract
 def trace_calls_for_tornado(trace, tx_hash):
     """
-    @notice Recursively trace internal 'CALL' operations and detect any interaction with Tornado Cash.
+    @notice Recursively trace internal 'CALL' operations and detect any transfers from Tornado Cash.
     @param trace The trace result from the Ethereum node.
     @param tx_hash The transaction hash of the current trace.
-    @return A dictionary containing transaction details if an interaction with Tornado Cash is detected; otherwise, None.
+    @return A dictionary containing transaction details if a transfer from Tornado Cash is detected; otherwise, None.
     """
     # Access the result object where the trace data exists
     result = trace.get("result", {})
@@ -54,11 +54,12 @@ def trace_calls_for_tornado(trace, tx_hash):
     value_hex = result.get("value", "0x0")
     value = int(value_hex, 16) / 10**18  # Convert from wei to ether
 
-    # Check for Tornado Cash address
-    interactions = []
+    # Check for transfers from Tornado Cash address
+    transfers = []
     if from_address == TORNADO_CASH_ADDRESS:
-        interactions.append({
+        transfers.append({
             "transaction_hash": tx_hash,
+            "from_address": from_address,
             "to_address": to_address,
             "value": value
         })
@@ -66,38 +67,38 @@ def trace_calls_for_tornado(trace, tx_hash):
     # Trace internal/nested calls
     if "calls" in result:
         for call in result["calls"]:
-            interactions.extend(trace_calls_for_tornado({"result": call}, tx_hash))  # Append found interactions
+            transfers.extend(trace_calls_for_tornado({"result": call}, tx_hash))  # Append found transfers
 
-    return interactions  # Return all found interactions
+    return transfers  # Return all found transfers
 
-# Detect interactions with Tornado Cash from trace results
-def detect_tornado_cash_interactions(trace_result):
+# Detect transfers from Tornado Cash from trace results
+def detect_tornado_cash_transfers(trace_result):
     """
-    @notice Detects interactions with Tornado Cash.
+    @notice Detects transfers from Tornado Cash.
     @param trace_result The trace results obtained from the Ethereum node.
-    @return List of detected interactions with Tornado Cash.
+    @return List of detected transfers from Tornado Cash.
     """
-    detected_interactions = []
+    detected_transfers = []
 
-    # Iterate over traces to find any interactions with Tornado Cash
+    # Iterate over traces to find any interactions from Tornado Cash
     for trace in trace_result:
         try:
             tx_hash = trace.get("txHash")  # Get the transaction hash for the current trace
             # Recursively trace all calls and detect interactions
-            interactions = trace_calls_for_tornado(trace, tx_hash)
-            detected_interactions.extend(interactions)  # Add found interactions to the main list
+            transfers = trace_calls_for_tornado(trace, tx_hash)
+            detected_transfers.extend(transfers)  # Add found transfers to the main list
 
         except Exception as e:
             print(f"Error processing trace: {e}")
             print("Trace data causing the error:", trace)  # Print trace for further inspection
 
-    return detected_interactions
+    return detected_transfers
 
 # Execute the script
 def main():
     """
     @notice Main function to execute the script.
-    Prompts the user for a block number and displays detected interactions with Tornado Cash.
+    Prompts the user for a block number and displays detected interactions from Tornado Cash.
     @return None
     """
     block_number = int(input("Enter block number: "))
@@ -106,19 +107,21 @@ def main():
     trace_result = trace_block_by_number(block_number)
 
     if trace_result is not None:
-        print(f"Detecting interactions with Tornado Cash for block number: {block_number}")
-        interactions = detect_tornado_cash_interactions(trace_result)
+        print(f"Detecting transfers from Tornado Cash for block number: {block_number}")
+        transfers = detect_tornado_cash_transfers(trace_result)
 
-        # Display detected interactions
-        if interactions:
-            print("\nDetected Interactions with Tornado Cash:")
-            for interaction in interactions:
-                print(f"Transaction Hash: {interaction['transaction_hash']}")
-                print(f"Funded Address: {interaction['to_address']}")
-                print(f"Value of sent ether: {interaction['value']} ETH")
+        # Display detected transfers
+        if transfers:
+            print("\nDetected transfers from Tornado Cash:")
+            print()
+            for transfer in transfers:
+                print(f"Transaction Hash: {transfer['transaction_hash']}")
+                print(f"Tornado Cash Address: {transfer['from_address']}")
+                print(f"Funded Address: {transfer['to_address']}")
+                print(f"Value of sent ether: {transfer['value']} ETH")
                 print()
         else:
-            print("No interactions with Tornado Cash detected.")
+            print("No Tornado Cash transfer detected.")
     else:
         print("No trace results returned.")
 
